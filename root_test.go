@@ -4,6 +4,7 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"path/filepath"
 	"testing"
 )
 
@@ -11,7 +12,7 @@ func SubTestRootFindDir(t *testing.T) {
 	// test pattern
 	patterns := []string{
 		_dir,
-		_dir + "/usr/local/bin",
+		_dir + filepath.FromSlash("/usr/local/bin"),
 	}
 
 	for _, pattern := range patterns {
@@ -32,19 +33,21 @@ func SubTestManipulateFile(t *testing.T) {
 		renamedDir  string
 		renamedFile string
 	}{
-		{_dir + "/usr/local/bin", "more.exe", _dir + "/usr/local/bin", "less.exe"},
+		{"usr/local/bin", "more.exe", "usr/local/bin", "less.exe"},
 	}
 
 	for _, pattern := range patterns {
 		addFile := pattern.addFile
-		addPath := pattern.addDir + "/" + pattern.addFile
-		renamedDir := pattern.renamedDir
+		addPath := filepath.Join(_dir, filepath.FromSlash(pattern.addDir), pattern.addFile)
+		renamedDir := filepath.Join(_dir, filepath.FromSlash(pattern.renamedDir))
 		renamedFile := pattern.renamedFile
-		renamedPath := pattern.renamedDir + "/" + pattern.renamedFile
+		renamedPath := filepath.Join(renamedDir, pattern.renamedFile)
 
 		// create new file
-		if _, err = os.Create(addPath); err != nil {
+		if f, err := os.Create(addPath); err != nil {
 			t.Fatalf("[SubTestManipulateFile] failed to create file: %s", err)
+		} else {
+			f.Close()
 		}
 
 		if node, err = _root.CreateAddNode(addPath); err != nil {
@@ -124,7 +127,7 @@ func SubTestManipulateDirectory(t *testing.T) {
 		renamedName string
 		fileNames   []string
 	}{
-		{_dir + "/usr/local/etc", "httpd", _dir + "/usr/local/etc", "apache", []string{"httpd.conf", "mime.conf"}},
+		{"usr/local/etc", "httpd", "usr/local/etc", "apache", []string{"httpd.conf", "mime.conf"}},
 	}
 
 	// for file remove check
@@ -132,10 +135,10 @@ func SubTestManipulateDirectory(t *testing.T) {
 
 	for _, pattern := range patterns {
 		addName := pattern.addName
-		addPath := pattern.addDir + "/" + pattern.addName
-		renamedDir := pattern.renamedDir
+		addPath := filepath.Join(_dir, filepath.FromSlash(pattern.addDir), pattern.addName)
+		renamedDir := filepath.Join(_dir, filepath.FromSlash(pattern.renamedDir))
 		renamedName := pattern.renamedName
-		renamedPath := pattern.renamedDir + "/" + pattern.renamedName
+		renamedPath := filepath.Join(renamedDir, pattern.renamedName)
 
 		// create new directory
 		if err = os.MkdirAll(addPath, 0777); err != nil {
@@ -164,10 +167,12 @@ func SubTestManipulateDirectory(t *testing.T) {
 
 		// append files on directory
 		for _, fileName := range pattern.fileNames {
-			filePath := addPath + "/" + fileName
+			filePath := filepath.Join(addPath, fileName)
 
-			if _, err = os.Create(addPath + "/" + fileName); err != nil {
+			if f, err := os.Create(filePath); err != nil {
 				t.Fatalf("[SubTestManipulateDirectory] failed to create file: %s", err)
+			} else {
+				f.Close()
 			}
 
 			if fileNode, err = _root.CreateAddNode(filePath); err != nil {
@@ -222,7 +227,7 @@ func SubTestManipulateDirectory(t *testing.T) {
 
 		// child files check
 		for _, fileName := range pattern.fileNames {
-			filePath := renamedPath + "/" + fileName
+			filePath := filepath.Join(renamedPath, fileName)
 			if fileNode, err = _root.Find(filePath); err != nil {
 				t.Fatalf("[SubTestManipulateDirectory] failed to find directory: %s", err)
 			} else {
@@ -255,7 +260,7 @@ func SubTestManipulateDirectory(t *testing.T) {
 
 		// child files check
 		for _, fileName := range pattern.fileNames {
-			filePath := renamedPath + "/" + fileName
+			filePath := filepath.Join(renamedPath, fileName)
 			if node, err = _root.Find(filePath); err == nil {
 				t.Fatalf("[SubTestManipulateDirectory] failed to Root/Find: %s", err)
 			}

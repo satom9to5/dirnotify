@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"path/filepath"
 	"testing"
 	"time"
 )
@@ -34,7 +35,7 @@ func SubTestWatch(t *testing.T) {
 	// emulate user manipulate function
 	manipulate := func(manipulations []watchTestManipulation) {
 		for _, m := range manipulations {
-			absPath := _dir + "/" + m.dir + "/" + m.name
+			absPath := filepath.Join(_dir, filepath.FromSlash(m.dir), m.name)
 
 			switch m.Op {
 			case Create:
@@ -43,12 +44,14 @@ func SubTestWatch(t *testing.T) {
 						t.Fatalf("[SubTestWatch] failed to create directory: %s", err)
 					}
 				} else {
-					if _, err = os.Create(absPath); err != nil {
+					if f, err := os.Create(absPath); err != nil {
 						t.Fatalf("[SubTestWatch] failed to create file: %s", err)
+					} else {
+						f.Close()
 					}
 				}
 			case Rename:
-				renamedPath := _dir + "/" + m.toDir + "/" + m.toName
+				renamedPath := filepath.Join(_dir, filepath.FromSlash(m.toDir), m.toName)
 				if err = os.Rename(absPath, renamedPath); err != nil {
 					t.Fatalf("[SubTestWatch] failed to rename: %s", err)
 				}
@@ -67,12 +70,12 @@ func SubTestWatch(t *testing.T) {
 				if err != nil {
 					t.Fatalf("[SubTestWatch] failed to open file: %s", err)
 				}
+				defer fp.Close()
 
 				writer := bufio.NewWriter(fp)
 				if _, err := writer.WriteString(makeTestDummyString(1048576)); err != nil {
 					t.Fatalf("[SubTestWatch] failed to write file: %s", err)
 				}
-
 			}
 		}
 
@@ -99,7 +102,7 @@ func SubTestWatch(t *testing.T) {
 			select {
 			case e := <-_root.ch:
 				events = append(events, e)
-			case <-time.After(2 * time.Second):
+			case <-time.After(3 * time.Second):
 				t.Fatalf("[SubTestWatch] too long to wait for event.")
 			case <-doneCh:
 				if len(*(_root.queues)) == 0 {
@@ -217,11 +220,11 @@ func testEvent(event Event, pattern watchTestPattern) error {
 		return err
 	}
 
-	absPath := _dir + "/" + pattern.absPath
-	beforePath := _dir + "/" + pattern.beforePath
+	absPath := filepath.Join(_dir, filepath.FromSlash(pattern.absPath))
+	beforePath := filepath.Join(_dir, filepath.FromSlash(pattern.beforePath))
 
 	if event.Op != pattern.Op {
-		return errors.New(fmt.Sprintf("Op is different. expect: %d, fact: %d", pattern.Op, event.Op))
+		return errors.New(fmt.Sprintf("Op is different. expect: %d, fact: %d, path: %s", pattern.Op, event.Op, p))
 	}
 
 	if p != absPath {

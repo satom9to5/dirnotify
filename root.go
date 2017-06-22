@@ -7,8 +7,8 @@ import (
 	"sync"
 	"time"
 	// third party
-	"github.com/fsnotify/fsnotify"
 	"github.com/satom9to5/fileinfo"
+	"github.com/satom9to5/fsnotify"
 )
 
 var (
@@ -128,10 +128,16 @@ func (r *Root) AddNode(n *Node) error {
 
 	// watcher add when directory
 	if n.IsDir() {
-		return r.watcher.Add(n.Path())
-	} else {
-		return nil
+		if err := r.watcher.Add(n.Path()); err != nil {
+			if debug {
+				fmt.Printf("[Root/RenameNode] watcher Add path: %s, error: %s\n", n.Path(), err)
+			}
+
+			return err
+		}
 	}
+
+	return nil
 }
 
 func (r *Root) CreateAddNode(p string) (*Node, error) {
@@ -181,8 +187,11 @@ func (r *Root) RenameNode(n *Node, dir, name string) error {
 
 	// remove from wacher when directory
 	for _, dir := range dirs {
+		// ignore not exist diretory error.
 		if err := r.watcher.Remove(dir); err != nil {
-			return err
+			if debug {
+				fmt.Printf("[Root/RenameNode] watcher Remove path: %s, error: %s\n", dir, err)
+			}
 		}
 	}
 
@@ -218,7 +227,11 @@ func (r *Root) RemoveNode(n *Node) error {
 		// remove from wacher when directory
 		if node.IsDir() {
 			// ignore not exist diretory error.
-			r.watcher.Remove(node.Path())
+			if err := r.watcher.Remove(node.Path()); err != nil {
+				if debug {
+					fmt.Printf("[Root/RemoveNode] watcher Remove path: %s, error: %s\n", node.Path(), err)
+				}
+			}
 		}
 	}
 
@@ -231,7 +244,7 @@ func (r *Root) AddQueue(e fsnotify.Event) error {
 	go func() {
 		r.mu.Lock()
 
-		if debug {
+		if debug && e.Op > 0 {
 			fmt.Println("[Root/AddQueue] Events: " + e.Op.String() + " Name: " + e.Name)
 		}
 

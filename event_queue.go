@@ -5,8 +5,8 @@ import (
 	"sort"
 	"strings"
 	// third party
-	"github.com/fsnotify/fsnotify"
 	"github.com/satom9to5/fileinfo"
+	"github.com/satom9to5/fsnotify"
 )
 
 type eventQueue struct {
@@ -38,7 +38,7 @@ func (eq *eventQueues) Clear() {
 
 func (eq *eventQueues) Add(e fsnotify.Event, r *Root) {
 	q := eventQueue{}
-	q.dir, q.base = fileinfo.DirBase(e.Name)
+	q.dir, q.base = fileinfo.Split(e.Name)
 
 	switch true {
 	case e.Op&fsnotify.Write == fsnotify.Write:
@@ -96,7 +96,14 @@ func (eq *eventQueues) CreateEvents(r *Root) error {
 		}
 	}
 
+	// check Move event.
+	events.UpdateOp()
+
 	for _, event := range *events {
+		if debug {
+			fmt.Println("[eventQueues/CreateEvents] event: " + event.String())
+		}
+
 		r.ch <- event
 	}
 

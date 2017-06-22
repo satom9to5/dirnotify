@@ -1,6 +1,7 @@
 package dirnotify
 
 import (
+	"path/filepath"
 	"testing"
 )
 
@@ -11,12 +12,12 @@ func TestEventQueue(t *testing.T) {
 	eqs.Sort()
 
 	eqPatterns := eventQueues{
-		eventQueue{Op: Create, dir: "/usr/bin", base: "more"},
-		eventQueue{Op: Remove, dir: "/usr/bin", base: "less"},
-		eventQueue{Op: Rename, dir: "/usr/bin", base: "more"},
-		eventQueue{Op: Rename, dir: "/usr/sbin", base: "more"},
-		eventQueue{Op: Create, dir: "/usr/bar/bin", base: "more"},
-		eventQueue{Op: Remove, dir: "/usr/foo/bin", base: "less"},
+		eventQueue{Op: Create, dir: filepath.FromSlash("/usr/bin"), base: "more"},
+		eventQueue{Op: Remove, dir: filepath.FromSlash("/usr/bin"), base: "less"},
+		eventQueue{Op: Rename, dir: filepath.FromSlash("/usr/bin"), base: "more"},
+		eventQueue{Op: Rename, dir: filepath.FromSlash("/usr/sbin"), base: "more"},
+		eventQueue{Op: Create, dir: filepath.FromSlash("/usr/bar/bin"), base: "more"},
+		eventQueue{Op: Remove, dir: filepath.FromSlash("/usr/foo/bin"), base: "less"},
 	}
 
 	for i, eqPt := range eqPatterns {
@@ -26,7 +27,7 @@ func TestEventQueue(t *testing.T) {
 	}
 
 	// rename check
-	eqs.Rename("/usr/bin", "/var/bin")
+	eqs.Rename(filepath.FromSlash("/usr/bin"), filepath.FromSlash("/var/bin"))
 
 	renamedDirs := []string{
 		"/usr/sbin",
@@ -38,6 +39,7 @@ func TestEventQueue(t *testing.T) {
 	}
 
 	for i, dir := range renamedDirs {
+		dir = filepath.FromSlash(dir)
 		if dir != eqs[i].dir {
 			t.Fatalf("[TestEventQueue] dir is different: %s : %s", dir, eqs[i].dir)
 		}
@@ -46,11 +48,11 @@ func TestEventQueue(t *testing.T) {
 
 func createTestEventQueues() eventQueues {
 	return eventQueues{
-		eventQueue{Op: Rename, dir: "/usr/sbin", base: "more"},
-		eventQueue{Op: Remove, dir: "/usr/foo/bin", base: "less"},
-		eventQueue{Op: Create, dir: "/usr/bar/bin", base: "more"},
-		eventQueue{Op: Rename, dir: "/usr/bin", base: "more"},
-		eventQueue{Op: Remove, dir: "/usr/bin", base: "less"},
-		eventQueue{Op: Create, dir: "/usr/bin", base: "more"},
+		eventQueue{Op: Rename, dir: filepath.FromSlash("/usr/sbin"), base: "more"},
+		eventQueue{Op: Remove, dir: filepath.FromSlash("/usr/foo/bin"), base: "less"},
+		eventQueue{Op: Create, dir: filepath.FromSlash("/usr/bar/bin"), base: "more"},
+		eventQueue{Op: Rename, dir: filepath.FromSlash("/usr/bin"), base: "more"},
+		eventQueue{Op: Remove, dir: filepath.FromSlash("/usr/bin"), base: "less"},
+		eventQueue{Op: Create, dir: filepath.FromSlash("/usr/bin"), base: "more"},
 	}
 }

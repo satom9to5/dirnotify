@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"io/ioutil"
 	"os"
+	"path/filepath"
 	"testing"
 )
 
@@ -70,16 +71,16 @@ func makeTempDir() {
 	_dir = tempdir()
 
 	dirs := []string{
-		"bin",
-		"sbin",
-		"usr/bin",
-		"usr/sbin",
-		"usr/local/bin",
-		"usr/local/etc",
+		"/bin",
+		"/sbin",
+		"/usr/bin",
+		"/usr/sbin",
+		"/usr/local/bin",
+		"/usr/local/etc",
 	}
 
-	for _, d := range dirs {
-		if err := os.MkdirAll(_dir+"/"+d, 0777); err != nil {
+	for _, dir := range dirs {
+		if err := os.MkdirAll(_dir+filepath.FromSlash(dir), 0777); err != nil {
 			fmt.Printf("failed to create directory: %s", err)
 			os.Exit(1)
 		}
@@ -87,15 +88,17 @@ func makeTempDir() {
 
 	// file name is windows style because can't distinct if unix style
 	files := []string{
-		"usr/bin/ls.exe",
-		"usr/sbin/ip.exe",
-		"usr/bin/cat.exe",
+		"/usr/bin/ls.exe",
+		"/usr/sbin/ip.exe",
+		"/usr/bin/cat.exe",
 	}
 
 	for _, file := range files {
-		if _, err := os.Create(_dir + "/" + file); err != nil {
+		if f, err := os.Create(_dir + filepath.FromSlash(file)); err != nil {
 			fmt.Printf("failed to create file: %v", err)
 			os.Exit(1)
+		} else {
+			f.Close()
 		}
 	}
 }
