@@ -4,6 +4,7 @@ import (
 	"errors"
 	"fmt"
 	"io/ioutil"
+	"log"
 	"sync"
 	"time"
 	// third party
@@ -24,14 +25,15 @@ func DisableDebug() {
 }
 
 type Root struct {
-	node    *Node            // root node
-	nodes   map[uint64]*Node // inode key
-	queues  *eventQueues     // event queue
-	watcher *fsnotify.Watcher
-	ch      chan Event
-	ticker  *time.Ticker
-	mu      sync.Mutex
-	wg      sync.WaitGroup
+	node       *Node        // root node
+	nodes      *NodeMap     // inode key
+	queues     *eventQueues // event queue
+	writeNodes *NodeMap     // nodes for check write event
+	watcher    *fsnotify.Watcher
+	Ch         chan Event
+	ticker     *time.Ticker
+	mu         sync.Mutex
+	wg         sync.WaitGroup
 }
 
 func NewRoot(dir string) (*Root, error) {
@@ -53,17 +55,18 @@ func NewRoot(dir string) (*Root, error) {
 	}
 
 	r := &Root{
-		node:    n,
-		nodes:   map[uint64]*Node{},
-		queues:  &eventQueues{},
-		watcher: watcher,
-		ch:      make(chan Event),
+		node:       n,
+		nodes:      &NodeMap{},
+		queues:     &eventQueues{},
+		writeNodes: &NodeMap{},
+		watcher:    watcher,
+		Ch:         make(chan Event),
 	}
 
 	n.root = r
 
 	// watcher add
-	r.AddNode(n)
+	r.addNode(n)
 
 	return r, nil
 }
@@ -90,7 +93,7 @@ func (r *Root) appendNodes(n *Node) error {
 	}
 
 	for _, fi := range fis {
-		chn, err := r.CreateAddNode(n.Path() + fileinfo.PathSep + fi.Name())
+		chn, err := r.createAddNode(n.Path() + fileinfo.PathSep + fi.Name())
 		if err != nil {
 			return err
 		}
@@ -107,8 +110,8 @@ func (r *Root) appendNodes(n *Node) error {
 	return nil
 }
 
-func (r *Root) PrintTree() {
-	r.node.PrintTree()
+func (r *Root) PrintTree() string {
+	return r.node.PrintTree()
 }
 
 // watcher Close
@@ -118,19 +121,22 @@ func (r *Root) Close() {
 	}
 }
 
-func (r *Root) AddNode(n *Node) error {
-	ino := n.Ino()
-	if ino == 0 {
-		return errors.New("Root/AddNode error: inode is empty.")
-	}
+type walkFunc func(fi fileinfo.FileInfo) error
 
-	r.nodes[ino] = n
+func (r *Root) Walk(fn walkFunc) error {
+	return r.node.walk(fn)
+}
+
+func (r *Root) addNode(n *Node) error {
+	if err := r.nodes.add(n); err != nil {
+		return err
+	}
 
 	// watcher add when directory
 	if n.IsDir() {
 		if err := r.watcher.Add(n.Path()); err != nil {
 			if debug {
-				fmt.Printf("[Root/RenameNode] watcher Add path: %s, error: %s\n", n.Path(), err)
+				log.Printf("[Root/RenameNode] watcher Add path: %s, error: %s\n", n.Path(), err)
 			}
 
 			return err
@@ -140,7 +146,7 @@ func (r *Root) AddNode(n *Node) error {
 	return nil
 }
 
-func (r *Root) CreateAddNode(p string) (*Node, error) {
+func (r *Root) createAddNode(p string) (*Node, error) {
 	paths := fileinfo.SplitPath(p, r.node.Dir())
 	if len(paths) == 0 {
 		return nil, errors.New("Root/CreateAddNode error: paths length is 0.")
@@ -158,12 +164,12 @@ func (r *Root) CreateAddNode(p string) (*Node, error) {
 		return nil, errors.New("Root/CreateAddNode error: cannot create new child node.")
 	}
 
-	return node, r.AddNode(node)
+	return node, r.addNode(node)
 }
 
 // n: before rename node
 // p: renamed path
-func (r *Root) RenameNode(n *Node, dir, name string) error {
+func (r *Root) renameNode(n *Node, dir, name string) error {
 	// remove from Root
 	ino := n.Ino()
 	if ino == 0 {
@@ -190,14 +196,14 @@ func (r *Root) RenameNode(n *Node, dir, name string) error {
 		// ignore not exist diretory error.
 		if err := r.watcher.Remove(dir); err != nil {
 			if debug {
-				fmt.Printf("[Root/RenameNode] watcher Remove path: %s, error: %s\n", dir, err)
+				log.Printf("[Root/RenameNode] watcher Remove path: %s, error: %s\n", dir, err)
 			}
 		}
 	}
 
 	// add new watcher directory
 	for _, node := range nodes {
-		if err := r.AddNode(node); err != nil {
+		if err := r.addNode(node); err != nil {
 			return err
 		}
 	}
@@ -205,10 +211,10 @@ func (r *Root) RenameNode(n *Node, dir, name string) error {
 	return nil
 }
 
-func (r *Root) RemoveNode(n *Node) error {
+func (r *Root) removeNode(n *Node) error {
 	ino := n.Ino()
 	if ino == 0 {
-		return errors.New("Root RemoveNode error: inode is empty.")
+		return errors.New("[Root/RemoveNode] error: inode is empty.")
 	}
 
 	// node remove (recursive call)
@@ -219,68 +225,21 @@ func (r *Root) RemoveNode(n *Node) error {
 
 	for _, node := range nodes {
 		ino := node.Ino()
-		if _, ok := r.nodes[ino]; ok {
-			// remove from inode map.
-			delete(r.nodes, ino)
-		}
+		// ignore cannot find error
+		r.nodes.remove(ino)
 
 		// remove from wacher when directory
 		if node.IsDir() {
 			// ignore not exist diretory error.
 			if err := r.watcher.Remove(node.Path()); err != nil {
 				if debug {
-					fmt.Printf("[Root/RemoveNode] watcher Remove path: %s, error: %s\n", node.Path(), err)
+					log.Printf("[Root/RemoveNode] watcher Remove path: %s, error: %s\n", node.Path(), err)
 				}
 			}
 		}
 	}
 
 	return nil
-}
-
-func (r *Root) AddQueue(e fsnotify.Event) error {
-	r.wg.Add(1)
-
-	go func() {
-		r.mu.Lock()
-
-		if debug && e.Op > 0 {
-			fmt.Println("[Root/AddQueue] Events: " + e.Op.String() + " Name: " + e.Name)
-		}
-
-		// add queue
-		r.queues.Add(e, r)
-
-		r.mu.Unlock()
-
-		r.wg.Done()
-	}()
-
-	return nil
-}
-
-func (r *Root) QueuesToEvent() {
-	if len(*(r.queues)) == 0 {
-		return
-	}
-
-	r.wg.Wait()
-
-	// exec goroutine only 1.
-	r.mu.Lock()
-	defer r.mu.Unlock()
-
-	// check executing on other goroutine.
-	if len(*(r.queues)) == 0 {
-		return
-	}
-
-	r.queues.Sort()
-	defer r.queues.Clear()
-
-	if err := r.queues.CreateEvents(r); err != nil {
-		fmt.Println(err)
-	}
 }
 
 func (r *Root) Find(absPath string) (*Node, error) {
@@ -303,10 +262,115 @@ func (r *Root) InoFind(ino uint64) *Node {
 		return nil
 	}
 
-	if node, ok := r.nodes[ino]; ok {
-		return node
-	} else {
-		return nil
+	return r.nodes.get(ino)
+}
+
+func (r *Root) appendWriteNodes(ne nodeEvent) error {
+	if ne.node == nil {
+		return errors.New("[Root/appendWriteNodes] error: event.node is nil.")
+	}
+
+	if err := ne.checkWritableEvent(); err != nil {
+		return err
+	}
+
+	if err := r.writeNodes.add(ne.node); err != nil {
+		return err
+	}
+
+	return nil
+}
+
+// under called in Watch()
+
+func (r *Root) addQueue(e fsnotify.Event) error {
+	r.wg.Add(1)
+
+	go func() {
+		r.mu.Lock()
+
+		if debug && e.Op > 0 {
+			log.Println("[Root/AddQueue] Events: " + e.Op.String() + " Name: " + e.Name)
+		}
+
+		// add queue
+		r.queues.add(e, r)
+
+		r.mu.Unlock()
+
+		r.wg.Done()
+	}()
+
+	return nil
+}
+
+func (r *Root) queuesToEvent() {
+	if len(*(r.queues)) == 0 {
+		return
+	}
+
+	r.wg.Wait()
+
+	// exec goroutine only 1.
+	r.mu.Lock()
+	defer r.mu.Unlock()
+
+	// check executing on other goroutine.
+	if len(*(r.queues)) == 0 {
+		return
+	}
+
+	r.queues.sort()
+	defer r.queues.clear()
+
+	nodeEvents, err := r.queues.createNodeEvents(r)
+	if err != nil {
+		if debug {
+			log.Println(err)
+		}
+
+		return
+	}
+
+	for _, ne := range *nodeEvents {
+		event := newEvent(ne)
+		if debug {
+			log.Println("[Root/checkEvents] event: " + event.String())
+		}
+
+		// append writeEvents
+		r.appendWriteNodes(ne)
+
+		// send channel
+		r.Ch <- event
+	}
+}
+
+func (r *Root) checkWriteNodes() {
+	if len(*(r.writeNodes)) == 0 {
+		return
+	}
+
+	r.mu.Lock()
+	defer r.mu.Unlock()
+
+	nodes := r.writeNodes.checkWriteComplete()
+
+	if len(nodes) == 0 {
+		return
+	}
+
+	for _, node := range nodes {
+		if node.Size() > 0 {
+			event := newEventByOpNode(WriteComplete, node)
+
+			if debug {
+				log.Println("[Root/checkWriteNodes] event: " + event.String())
+			}
+
+			// send channel
+			r.Ch <- event
+		}
 	}
 }
 
@@ -323,9 +387,10 @@ func (r *Root) Watch() {
 		for {
 			select {
 			case e := <-r.watcher.Events:
-				r.AddQueue(e)
+				r.addQueue(e)
 			case <-r.ticker.C:
-				r.QueuesToEvent()
+				r.checkWriteNodes()
+				r.queuesToEvent()
 			}
 		}
 	}()

@@ -32,11 +32,11 @@ func (q *eventQueue) Path() string {
 	return q.dir + fileinfo.PathSep + q.base
 }
 
-func (eq *eventQueues) Clear() {
+func (eq *eventQueues) clear() {
 	*eq = eventQueues{}
 }
 
-func (eq *eventQueues) Add(e fsnotify.Event, r *Root) {
+func (eq *eventQueues) add(e fsnotify.Event, r *Root) {
 	q := eventQueue{}
 	q.dir, q.base = fileinfo.Split(e.Name)
 
@@ -61,7 +61,7 @@ func (eq *eventQueues) Add(e fsnotify.Event, r *Root) {
 	*eq = append(*eq, q)
 }
 
-func (eq *eventQueues) AddFromNodes(nodes []*Node) {
+func (eq *eventQueues) addFromNodes(nodes []*Node) {
 	for _, node := range nodes {
 		q := eventQueue{
 			Op:   Create,
@@ -73,15 +73,15 @@ func (eq *eventQueues) AddFromNodes(nodes []*Node) {
 		*eq = append(*eq, q)
 	}
 
-	eq.Sort()
+	eq.sort()
 }
 
-func (eq *eventQueues) Sort() {
+func (eq *eventQueues) sort() {
 	sort.Sort(eq)
 }
 
-func (eq *eventQueues) CreateEvents(r *Root) error {
-	events := &Events{}
+func (eq *eventQueues) createNodeEvents(r *Root) (*nodeEvents, error) {
+	nes := &nodeEvents{}
 
 	for {
 		if len(*eq) == 0 {
@@ -91,23 +91,15 @@ func (eq *eventQueues) CreateEvents(r *Root) error {
 		q := (*eq)[0]
 		*eq = (*eq)[1:]
 
-		if err := events.Add(q, eq, r); err != nil {
-			return err
+		if err := nes.add(q, eq, r); err != nil {
+			return nil, err
 		}
 	}
 
 	// check Move event.
-	events.UpdateOp()
+	nes.updateOp()
 
-	for _, event := range *events {
-		if debug {
-			fmt.Println("[eventQueues/CreateEvents] event: " + event.String())
-		}
-
-		r.ch <- event
-	}
-
-	return nil
+	return nes, nil
 }
 
 // Sort Interface
@@ -143,10 +135,10 @@ func (eq *eventQueues) Less(i, j int) bool {
 }
 
 // rename path
-func (eq *eventQueues) Rename(from, to string) {
+func (eq *eventQueues) rename(from, to string) {
 	for i, q := range *eq {
 		(*eq)[i].dir = strings.Replace(q.dir, from, to, -1)
 	}
 
-	eq.Sort()
+	eq.sort()
 }

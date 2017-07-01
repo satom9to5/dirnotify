@@ -9,7 +9,7 @@ func TestEventQueue(t *testing.T) {
 	eqs := createTestEventQueues()
 
 	// sort check
-	eqs.Sort()
+	eqs.sort()
 
 	eqPatterns := eventQueues{
 		eventQueue{Op: Create, dir: filepath.FromSlash("/usr/bin"), base: "more"},
@@ -27,7 +27,7 @@ func TestEventQueue(t *testing.T) {
 	}
 
 	// rename check
-	eqs.Rename(filepath.FromSlash("/usr/bin"), filepath.FromSlash("/var/bin"))
+	eqs.rename(filepath.FromSlash("/usr/bin"), filepath.FromSlash("/var/bin"))
 
 	renamedDirs := []string{
 		"/usr/sbin",

@@ -50,7 +50,7 @@ func SubTestManipulateFile(t *testing.T) {
 			f.Close()
 		}
 
-		if node, err = _root.CreateAddNode(addPath); err != nil {
+		if node, err = _root.createAddNode(addPath); err != nil {
 			t.Fatalf("[SubTestManipulateFile] failed to Root/CreateAddNode: %s", err)
 		} else {
 			if err = testSamePathName(t, node, addPath, addFile); err != nil {
@@ -75,7 +75,7 @@ func SubTestManipulateFile(t *testing.T) {
 			t.Fatalf("[SubTestManipulateFile] failed to rename file: %s", err)
 		}
 
-		if err = _root.RenameNode(node, renamedDir, renamedFile); err != nil {
+		if err = _root.renameNode(node, renamedDir, renamedFile); err != nil {
 			t.Fatalf("[SubTestManipulateFile] failed to Root/RenameNode: %s", err)
 		} else {
 			if err = testSamePathName(t, node, renamedPath, renamedFile); err != nil {
@@ -101,7 +101,7 @@ func SubTestManipulateFile(t *testing.T) {
 			t.Fatalf("[SubTestManipulateFile] failed to remove file: %s", err)
 		}
 
-		if err = _root.RemoveNode(node); err != nil {
+		if err = _root.removeNode(node); err != nil {
 			t.Fatalf("[SubTestManipulateFile] failed to Root/RemoveNode: %s", err)
 		}
 
@@ -145,7 +145,7 @@ func SubTestManipulateDirectory(t *testing.T) {
 			t.Fatalf("[SubTestManipulateDirectory] failed to create directory: %s", err)
 		}
 
-		if node, err = _root.CreateAddNode(addPath); err != nil {
+		if node, err = _root.createAddNode(addPath); err != nil {
 			t.Fatalf("[SubTestManipulateDirectory] failed to CreateAddNode: %s", err)
 		} else {
 			if err = testSamePathName(t, node, addPath, addName); err != nil {
@@ -175,7 +175,7 @@ func SubTestManipulateDirectory(t *testing.T) {
 				f.Close()
 			}
 
-			if fileNode, err = _root.CreateAddNode(filePath); err != nil {
+			if fileNode, err = _root.createAddNode(filePath); err != nil {
 				t.Fatalf("[SubTestManipulateDirectory] failed to CreateAddNode: %s", err)
 			} else {
 				if err = testSamePathName(t, fileNode, filePath, fileName); err != nil {
@@ -204,7 +204,7 @@ func SubTestManipulateDirectory(t *testing.T) {
 			t.Fatalf("[SubTestManipulateFile] failed to rename directory: %s", err)
 		}
 
-		if err = _root.RenameNode(node, renamedDir, renamedName); err != nil {
+		if err = _root.renameNode(node, renamedDir, renamedName); err != nil {
 			t.Fatalf("[SubTestManipulateFile] failed to Root/RenameNode: %s", err)
 		} else {
 			if err = testSamePathName(t, node, renamedPath, renamedName); err != nil {
@@ -246,7 +246,7 @@ func SubTestManipulateDirectory(t *testing.T) {
 			t.Fatalf("[SubTestManipulateDirectory] failed to remove directory: %s", err)
 		}
 
-		if err = _root.RemoveNode(node); err != nil {
+		if err = _root.removeNode(node); err != nil {
 			t.Fatalf("[SubTestManipulateDirectory] failed to Root/RemoveNode: %s", err)
 		}
 

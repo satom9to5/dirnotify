@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"strconv"
 	"strings"
+	"time"
 	// third party
 	"github.com/satom9to5/fileinfo"
 )
@@ -29,6 +30,8 @@ type Node struct {
 	dirs   map[string]*Node // directory(has directories or files)
 	files  map[string]*Node // file(end node)
 }
+
+type NodeMap map[uint64]*Node
 
 func NewChildNode(parent *Node, childName string) *Node {
 	if parent == nil {
@@ -106,6 +109,10 @@ func (n *Node) Size() int64 {
 	return n.info.Size()
 }
 
+func (n *Node) ModTime() time.Time {
+	return n.info.ModTime()
+}
+
 func (n *Node) IsDir() bool {
 	return n.info.IsDir()
 }
@@ -120,6 +127,17 @@ func (n *Node) Path() string {
 
 func (n *Node) Ino() uint64 {
 	return n.info.Ino()
+}
+
+func (n *Node) Stat() error {
+	fi, err := fileinfo.Stat(n.Path())
+	if err != nil {
+		return nil
+	}
+
+	n.info = fi
+
+	return nil
 }
 
 // 2nd return bool
@@ -288,22 +306,98 @@ func (n *Node) children() []*Node {
 }
 
 // debug
-func (n *Node) PrintTree() {
-	n.printTree(0)
+func (n *Node) PrintTree() string {
+	return n.printTree(0)
 }
 
-func (n *Node) printTree(depth int) {
-	fmt.Printf("%-"+strconv.Itoa(depth*2)+"s%s\n", "", n)
+func (n *Node) printTree(depth int) string {
+	str := fmt.Sprintf("%-"+strconv.Itoa(depth*2)+"s%s\n", "", n)
 
 	if !n.IsDir() {
-		return
+		return str
 	}
 
 	for _, file := range n.files {
-		file.printTree(depth + 1)
+		str += file.printTree(depth + 1)
 	}
 
 	for _, dir := range n.dirs {
-		dir.printTree(depth + 1)
+		str += dir.printTree(depth + 1)
 	}
+
+	return str
+}
+
+func (n *Node) walk(fn walkFunc) error {
+	if n.info == nil {
+		return errors.New("[NodeMap/walk] error: node info is nil.")
+	}
+
+	fn(*(n.info))
+
+	for _, file := range n.files {
+		if err := file.walk(fn); err != nil {
+			return err
+		}
+	}
+
+	for _, dir := range n.dirs {
+		if err := dir.walk(fn); err != nil {
+			return err
+		}
+	}
+
+	return nil
+}
+
+func (nm *NodeMap) get(ino uint64) *Node {
+	if n, ok := (*nm)[ino]; ok {
+		return n
+	} else {
+		return nil
+	}
+}
+
+func (nm *NodeMap) add(n *Node) error {
+	ino := n.Ino()
+	if ino == 0 {
+		return errors.New("[NodeMap/add] error: inode is empty.")
+	}
+
+	(*nm)[ino] = n
+
+	return nil
+}
+
+func (nm *NodeMap) remove(ino uint64) error {
+	if _, ok := (*nm)[ino]; ok {
+		delete(*nm, ino)
+
+		return nil
+	} else {
+		return errors.New("[NodeMap/remove] error: cannot find node.")
+	}
+}
+
+func (nm *NodeMap) checkWriteComplete() []*Node {
+	nodes := []*Node{}
+
+	for ino, node := range *nm {
+		// get current value before update
+		preTime := node.ModTime()
+		preSize := node.Size()
+
+		if err := node.Stat(); err == nil {
+			if node.ModTime() == preTime && node.Size() == preSize {
+				nodes = append(nodes, node)
+
+				nm.remove(ino)
+			}
+		} else {
+			// when file removed.
+			nm.remove(ino)
+		}
+	}
+
+	return nodes
 }
