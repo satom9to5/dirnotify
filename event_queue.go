@@ -18,80 +18,84 @@ type eventQueue struct {
 
 type eventQueues []eventQueue
 
-func (q eventQueue) String() string {
-	result := fmt.Sprintf("Op: %s, dir: %s, base: %s", flagString(q.Op), q.dir, q.base)
+func (eq eventQueue) String() string {
+	result := fmt.Sprintf("Op: %s, dir: %s, base: %s", flagString(eq.Op), eq.dir, eq.base)
 
-	if q.node != nil {
-		result += fmt.Sprint(", ino: %d", q.node.Ino())
+	if eq.node != nil {
+		result += fmt.Sprintf(", ino: %d", eq.node.Ino())
 	}
 
 	return result
 }
 
-func (q *eventQueue) Path() string {
-	return q.dir + fileinfo.PathSep + q.base
+func (eq *eventQueue) Path() string {
+	return eq.dir + fileinfo.PathSep + eq.base
 }
 
-func (eq *eventQueues) clear() {
-	*eq = eventQueues{}
+func (eqs *eventQueues) clear() {
+	*eqs = eventQueues{}
 }
 
-func (eq *eventQueues) add(e fsnotify.Event, r *Root) {
-	q := eventQueue{}
-	q.dir, q.base = fileinfo.Split(e.Name)
+func (eqs *eventQueues) add(e fsnotify.Event, r *Root) {
+	eq := eventQueue{}
+	eq.dir, eq.base = fileinfo.Split(e.Name)
 
 	switch true {
 	case e.Op&fsnotify.Write == fsnotify.Write:
-		q.Op |= Write
+		eq.Op |= Write
 	case e.Op&fsnotify.Create == fsnotify.Create:
-		q.Op |= Create
+		eq.Op |= Create
 	case e.Op&fsnotify.Remove == fsnotify.Remove:
-		q.Op |= Remove
+		eq.Op |= Remove
 	case e.Op&fsnotify.Rename == fsnotify.Rename:
-		q.Op |= Rename
+		eq.Op |= Rename
 	case e.Op&fsnotify.Chmod == fsnotify.Chmod:
-		q.Op |= Chmod
+		eq.Op |= Chmod
 	}
 
 	// exist nodes except Create event.
 	if n, err := r.Find(e.Name); err == nil {
-		q.node = n
+		eq.node = n
 	}
 
-	*eq = append(*eq, q)
+	*eqs = append(*eqs, eq)
 }
 
-func (eq *eventQueues) addFromNodes(nodes []*Node) {
+func (eqs *eventQueues) addFromNodes(nodes []*Node) {
 	for _, node := range nodes {
-		q := eventQueue{
-			Op:   Create,
-			dir:  node.Dir(),
-			base: node.Name(),
-			node: node,
-		}
-
-		*eq = append(*eq, q)
+		eqs.addFromNode(node, Create)
 	}
 
-	eq.sort()
+	eqs.sort()
 }
 
-func (eq *eventQueues) sort() {
-	sort.Sort(eq)
+func (eqs *eventQueues) addFromNode(n *Node, op Op) {
+	eq := eventQueue{
+		Op:   op,
+		dir:  n.Dir(),
+		base: n.Name(),
+		node: n,
+	}
+
+	*eqs = append(*eqs, eq)
 }
 
-func (eq *eventQueues) createNodeEvents(r *Root) (*nodeEvents, error) {
+func (eqs *eventQueues) sort() {
+	sort.Sort(eqs)
+}
+
+func (eqs *eventQueues) createNodeEvents(r *Root) (*nodeEvents, error) {
 	nes := &nodeEvents{}
 
 	for {
-		if len(*eq) == 0 {
+		if len(*eqs) == 0 {
 			break
 		}
 
-		q := (*eq)[0]
-		*eq = (*eq)[1:]
+		eq := (*eqs)[0]
+		*eqs = (*eqs)[1:]
 
-		if err := nes.add(q, eq, r); err != nil {
+		if err := nes.add(eq, eqs, r); err != nil {
 			return nil, err
 		}
 	}
@@ -103,18 +107,18 @@ func (eq *eventQueues) createNodeEvents(r *Root) (*nodeEvents, error) {
 }
 
 // Sort Interface
-func (eq *eventQueues) Len() int {
-	return len(*eq)
+func (eqs *eventQueues) Len() int {
+	return len(*eqs)
 }
 
 // Sort Interface
-func (eq *eventQueues) Swap(i, j int) {
-	(*eq)[i], (*eq)[j] = (*eq)[j], (*eq)[i]
+func (eqs *eventQueues) Swap(i, j int) {
+	(*eqs)[i], (*eqs)[j] = (*eqs)[j], (*eqs)[i]
 }
 
 // Sort Interface
-func (eq *eventQueues) Less(i, j int) bool {
-	ie, je := (*eq)[i], (*eq)[j]
+func (eqs *eventQueues) Less(i, j int) bool {
+	ie, je := (*eqs)[i], (*eqs)[j]
 
 	if ie.dir == je.dir {
 		if ie.Op == je.Op {
@@ -135,10 +139,10 @@ func (eq *eventQueues) Less(i, j int) bool {
 }
 
 // rename path
-func (eq *eventQueues) rename(from, to string) {
-	for i, q := range *eq {
-		(*eq)[i].dir = strings.Replace(q.dir, from, to, -1)
+func (eqs *eventQueues) rename(from, to string) {
+	for i, eq := range *eqs {
+		(*eqs)[i].dir = strings.Replace(eq.dir, from, to, -1)
 	}
 
-	eq.sort()
+	eqs.sort()
 }

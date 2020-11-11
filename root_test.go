@@ -11,8 +11,8 @@ import (
 func SubTestRootFindDir(t *testing.T) {
 	// test pattern
 	patterns := []string{
-		_dir,
-		_dir + filepath.FromSlash("/usr/local/bin"),
+		_dirs[0],
+		_dirs[0] + filepath.FromSlash("/usr/local/bin"),
 	}
 
 	for _, pattern := range patterns {
@@ -38,8 +38,8 @@ func SubTestManipulateFile(t *testing.T) {
 
 	for _, pattern := range patterns {
 		addFile := pattern.addFile
-		addPath := filepath.Join(_dir, filepath.FromSlash(pattern.addDir), pattern.addFile)
-		renamedDir := filepath.Join(_dir, filepath.FromSlash(pattern.renamedDir))
+		addPath := filepath.Join(_dirs[0], filepath.FromSlash(pattern.addDir), pattern.addFile)
+		renamedDir := filepath.Join(_dirs[0], filepath.FromSlash(pattern.renamedDir))
 		renamedFile := pattern.renamedFile
 		renamedPath := filepath.Join(renamedDir, pattern.renamedFile)
 
@@ -135,8 +135,8 @@ func SubTestManipulateDirectory(t *testing.T) {
 
 	for _, pattern := range patterns {
 		addName := pattern.addName
-		addPath := filepath.Join(_dir, filepath.FromSlash(pattern.addDir), pattern.addName)
-		renamedDir := filepath.Join(_dir, filepath.FromSlash(pattern.renamedDir))
+		addPath := filepath.Join(_dirs[0], filepath.FromSlash(pattern.addDir), pattern.addName)
+		renamedDir := filepath.Join(_dirs[0], filepath.FromSlash(pattern.renamedDir))
 		renamedName := pattern.renamedName
 		renamedPath := filepath.Join(renamedDir, pattern.renamedName)
 

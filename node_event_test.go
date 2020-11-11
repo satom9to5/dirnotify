@@ -50,7 +50,7 @@ func SubTestWatch(t *testing.T) {
 	// emulate user manipulate function
 	manipulate := func(manipulations []watchTestManipulation) {
 		for _, m := range manipulations {
-			absPath := filepath.Join(_dir, filepath.FromSlash(m.dir), m.name)
+			absPath := filepath.Join(_dirs[0], filepath.FromSlash(m.dir), m.name)
 
 			switch m.Op {
 			case Create:
@@ -70,7 +70,7 @@ func SubTestWatch(t *testing.T) {
 					}
 				}
 			case Rename:
-				renamedPath := filepath.Join(_dir, filepath.FromSlash(m.toDir), m.toName)
+				renamedPath := filepath.Join(_dirs[0], filepath.FromSlash(m.toDir), m.toName)
 				if err = os.Rename(absPath, renamedPath); err != nil {
 					t.Fatalf("[SubTestWatch] failed to rename: %s", err)
 				}
@@ -231,11 +231,11 @@ func testEventLength(events []Event, patterns []watchTestPattern) error {
 }
 
 func testEvent(e Event, pattern watchTestPattern) error {
-	absPath := filepath.Join(_dir, filepath.FromSlash(pattern.absPath))
-	beforePath := filepath.Join(_dir, filepath.FromSlash(pattern.beforePath))
+	absPath := filepath.Join(_dirs[0], filepath.FromSlash(pattern.absPath))
+	beforePath := filepath.Join(_dirs[0], filepath.FromSlash(pattern.beforePath))
 
 	if e.Op() != pattern.Op {
-		return errors.New(fmt.Sprintf("Op is different. expect: %d, fact: %d, path: %s", pattern.Op, e.Op(), e.Path))
+		return errors.New(fmt.Sprintf("Op is different. expect: %d, fact: %d, path: %s", pattern.Op, e.Op(), e.Path()))
 	}
 
 	if e.Path() != absPath {

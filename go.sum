@@ -1,0 +1,6 @@
+github.com/satom9to5/fileinfo v0.0.0-20170701235059-df85bfdfeff5 h1:sjn/DWhyxaP7R4g8wq2g+z4sYgY3el0Etk9RqZphTjE=
+github.com/satom9to5/fileinfo v0.0.0-20170701235059-df85bfdfeff5/go.mod h1:U9wCdWGSaerfQS56RpbKQxM/oJlgdE3ms9kUnOqu5mw=
+github.com/satom9to5/fsnotify v1.4.2 h1:tGlAuEV6866D/BSJiDbsqLFeKjsYcRHWkY8vSyQfJ5c=
+github.com/satom9to5/fsnotify v1.4.2/go.mod h1:Mi76TOkYhgs7VmRagWJfgK1+KXAY/e/nG35dRPTpVPc=
+golang.org/x/sys v0.0.0-20200302150141-5c8b2ff67527 h1:uYVVQ9WP/Ds2ROhcaGPeIdVq0RIXVLwsHlnvJ+cT1So=
+golang.org/x/sys v0.0.0-20200302150141-5c8b2ff67527/go.mod h1:h1NjWce9XRLGQEsW7wpKNCjG9DtNlClVuFLEZdDNbEs=

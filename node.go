@@ -3,6 +3,8 @@ package dirnotify
 import (
 	"errors"
 	"fmt"
+	"io/ioutil"
+	"log"
 	"strconv"
 	"strings"
 	"time"
@@ -25,13 +27,10 @@ import (
 
 type Node struct {
 	info   *fileinfo.FileInfo
-	root   *Root
 	parent *Node            // parent directory
 	dirs   map[string]*Node // directory(has directories or files)
 	files  map[string]*Node // file(end node)
 }
-
-type NodeMap map[uint64]*Node
 
 func NewChildNode(parent *Node, childName string) *Node {
 	if parent == nil {
@@ -42,12 +41,15 @@ func NewChildNode(parent *Node, childName string) *Node {
 
 	fi, err := fileinfo.Stat(absPath)
 	if err != nil {
+		if debug {
+			log.Printf("[NewChildNode] fileinfo error: %s\n", absPath)
+		}
+
 		return nil
 	}
 
 	n := &Node{
 		info:   fi,
-		root:   parent.root,
 		parent: parent,
 	}
 
@@ -330,7 +332,7 @@ func (n *Node) printTree(depth int) string {
 
 func (n *Node) walk(fn walkFunc) error {
 	if n.info == nil {
-		return errors.New("[NodeMap/walk] error: node info is nil.")
+		return errors.New("[Node/walk] error: node info is nil.")
 	}
 
 	fn(*(n.info))
@@ -350,54 +352,124 @@ func (n *Node) walk(fn walkFunc) error {
 	return nil
 }
 
-func (nm *NodeMap) get(ino uint64) *Node {
-	if n, ok := (*nm)[ino]; ok {
-		return n
-	} else {
-		return nil
-	}
-}
-
-func (nm *NodeMap) add(n *Node) error {
-	ino := n.Ino()
-	if ino == 0 {
-		return errors.New("[NodeMap/add] error: inode is empty.")
+func (n *Node) checkCurrentDirectory() (eqs eventQueues, err error) {
+	if !n.IsDir() {
+		return eqs, errors.New("[Node/checkCurrentDirectory] error: node is not directory.")
 	}
 
-	(*nm)[ino] = n
+	curTime := n.ModTime()
 
-	return nil
-}
-
-func (nm *NodeMap) remove(ino uint64) error {
-	if _, ok := (*nm)[ino]; ok {
-		delete(*nm, ino)
-
-		return nil
-	} else {
-		return errors.New("[NodeMap/remove] error: cannot find node.")
+	if err = n.Stat(); err != nil {
+		return
 	}
-}
 
-func (nm *NodeMap) checkWriteComplete() []*Node {
-	nodes := []*Node{}
-
-	for ino, node := range *nm {
-		// get current value before update
-		preTime := node.ModTime()
-		preSize := node.Size()
-
-		if err := node.Stat(); err == nil {
-			if node.ModTime() == preTime && node.Size() == preSize {
-				nodes = append(nodes, node)
-
-				nm.remove(ino)
-			}
-		} else {
-			// when file removed.
-			nm.remove(ino)
+	// check when update ModTime
+	if curTime != n.ModTime() {
+		eqs, err = n.checkDirectory()
+		if debug && err != nil {
+			log.Println("[Node/checkCurrentDirectory] error: " + err.Error())
 		}
 	}
 
-	return nodes
+	// check child directories
+	var deqs eventQueues
+	for _, dir := range n.dirs {
+		deqs, err = dir.checkCurrentDirectory()
+		if debug && err != nil {
+			log.Println("[Node/checkCurrentDirectory] error: " + err.Error())
+		}
+
+		eqs = append(eqs, deqs...)
+	}
+
+	return
+}
+
+func (n *Node) checkDirectory() (eventQueues, error) {
+	eqs := eventQueues{}
+
+	fis, err := ioutil.ReadDir(n.Path())
+
+	if err != nil {
+		return eqs, err
+	}
+
+	// get current directories & files
+	dirNames, fileNames := []string{}, []string{}
+
+	for _, fi := range fis {
+		if fi.IsDir() {
+			dirNames = append(dirNames, fi.Name())
+		} else {
+			fileNames = append(fileNames, fi.Name())
+		}
+	}
+
+	// compare current dirs&files and nodes
+	dirs, files := map[string]*Node{}, map[string]*Node{}
+	// delete when include dirNames&fileNames.
+	removeDirs, removeFiles := n.dirs, n.files
+	// not found dirs&files path
+	nfDirs, nfFiles := []string{}, []string{}
+
+	// append not found dirs&files
+	for _, dirName := range dirNames {
+		_, name := fileinfo.Split(dirName)
+
+		if dir, ok := removeDirs[name]; ok {
+			dirs[name] = dir
+			delete(removeDirs, name)
+		} else {
+			nfDirs = append(nfDirs, name)
+		}
+	}
+
+	for _, fileName := range fileNames {
+		_, name := fileinfo.Split(fileName)
+
+		if file, ok := removeFiles[name]; ok {
+			files[name] = file
+			delete(removeFiles, name)
+		} else {
+			nfFiles = append(nfFiles, name)
+		}
+	}
+
+	// replace Node.dirs & Node.files
+	n.dirs = dirs
+	n.files = files
+
+	// append not found dirs&files
+	for _, dirName := range nfDirs {
+		node := NewChildNode(n, dirName)
+		if debug {
+			fmt.Println("[Node/checkDirectory] add directory: " + node.String())
+		}
+		eqs.addFromNode(node, Create)
+	}
+
+	for _, fileName := range nfFiles {
+		node := NewChildNode(n, fileName)
+		if debug {
+			fmt.Println("[Node/checkDirectory] add file: " + node.String())
+		}
+		eqs.addFromNode(node, Create)
+	}
+
+	// append remove nodes
+	for _, dir := range removeDirs {
+		if debug {
+			fmt.Println("[Node/checkDirectory] remove directory: " + dir.String())
+		}
+		eqs.addFromNode(dir, Remove)
+	}
+
+	for _, file := range removeFiles {
+		if debug {
+			fmt.Println("[Node/checkDirectory] remove file: " + file.String())
+		}
+		eqs.addFromNode(file, Remove)
+	}
+
+	return eqs, nil
 }

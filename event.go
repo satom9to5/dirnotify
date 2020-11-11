@@ -86,7 +86,7 @@ func (e Event) String() string {
 		t = "directory"
 	}
 
-	str := fmt.Sprintf("Op: %s, Path: %s, ", flagString(e.op), t)
+	str := fmt.Sprintf("Op: %s, Path: %s, ", flagString(e.op), e.path)
 	if e.beforePath != "" {
 		str += fmt.Sprintf("BeforePath: %s, ", e.beforePath)
 	}

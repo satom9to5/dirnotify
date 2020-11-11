@@ -12,31 +12,21 @@ import (
 	"github.com/satom9to5/fsnotify"
 )
 
-var (
-	debug = false
-)
-
-func EnableDebug() {
-	debug = true
-}
-
-func DisableDebug() {
-	debug = true
-}
-
 type Root struct {
-	node       *Node        // root node
-	nodes      *NodeMap     // inode key
+	root       *Node        // root node
+	nodeMap    *NodeMap     // inode key
 	queues     *eventQueues // event queue
 	writeNodes *NodeMap     // nodes for check write event
 	watcher    *fsnotify.Watcher
 	Ch         chan Event
 	ticker     *time.Ticker
+	chkTicker  *time.Ticker // for check directory
 	mu         sync.Mutex
 	wg         sync.WaitGroup
 }
 
-func NewRoot(dir string) (*Root, error) {
+func NewRoot(dirs []string) (*Root, error) {
+	dir := dirs[0] // temporary
 	fi, err := fileinfo.Stat(dir)
 	if err != nil {
 		return nil, err
@@ -48,36 +38,34 @@ func NewRoot(dir string) (*Root, error) {
 	}
 
 	// root node
-	n := &Node{
+	rn := &Node{
 		info:  fi,
 		dirs:  map[string]*Node{},
 		files: map[string]*Node{},
 	}
 
 	r := &Root{
-		node:       n,
-		nodes:      &NodeMap{},
+		root:       rn,
+		nodeMap:    &NodeMap{},
 		queues:     &eventQueues{},
 		writeNodes: &NodeMap{},
 		watcher:    watcher,
 		Ch:         make(chan Event),
 	}
 
-	n.root = r
-
 	// watcher add
-	r.addNode(n)
+	r.addNode(rn)
 
 	return r, nil
 }
 
-func CreateNodeTree(dir string) (*Root, error) {
-	r, err := NewRoot(dir)
+func CreateNodeTree(dirs []string) (*Root, error) {
+	r, err := NewRoot(dirs)
 	if err != nil {
 		return nil, err
 	}
 
-	if err := r.appendNodes(r.node); err != nil {
+	if err := r.appendNodes(r.root); err != nil {
 		return nil, err
 	}
 
@@ -111,7 +99,7 @@ func (r *Root) appendNodes(n *Node) error {
 }
 
 func (r *Root) PrintTree() string {
-	return r.node.PrintTree()
+	return r.root.PrintTree()
 }
 
 // watcher Close
@@ -124,11 +112,11 @@ func (r *Root) Close() {
 type walkFunc func(fi fileinfo.FileInfo) error
 
 func (r *Root) Walk(fn walkFunc) error {
-	return r.node.walk(fn)
+	return r.root.walk(fn)
 }
 
 func (r *Root) addNode(n *Node) error {
-	if err := r.nodes.add(n); err != nil {
+	if err := r.nodeMap.add(n); err != nil {
 		return err
 	}
 
@@ -147,21 +135,21 @@ func (r *Root) addNode(n *Node) error {
 }
 
 func (r *Root) createAddNode(p string) (*Node, error) {
-	paths := fileinfo.SplitPath(p, r.node.Dir())
+	paths := fileinfo.SplitPath(p, r.root.Dir())
 	if len(paths) == 0 {
-		return nil, errors.New("Root/CreateAddNode error: paths length is 0.")
+		return nil, errors.New("[Root/createAddNode] error: paths length is 0.")
 	}
 
 	pathsLen := len(paths)
 
-	parent, ok := r.node.find(paths[0 : pathsLen-1])
+	parent, ok := r.root.find(paths[0 : pathsLen-1])
 	if parent == nil || !ok {
-		return nil, errors.New("Root/CreateAddNode error: cannot found parent.")
+		return nil, errors.New("[Root/createAddNode] error: cannot found parent.")
 	}
 
 	node := NewChildNode(parent, paths[pathsLen-1])
 	if node == nil {
-		return nil, errors.New("Root/CreateAddNode error: cannot create new child node.")
+		return nil, errors.New("[Root/createAddNode] error: cannot create new child node.")
 	}
 
 	return node, r.addNode(node)
@@ -226,7 +214,7 @@ func (r *Root) removeNode(n *Node) error {
 	for _, node := range nodes {
 		ino := node.Ino()
 		// ignore cannot find error
-		r.nodes.remove(ino)
+		r.nodeMap.remove(ino)
 
 		// remove from wacher when directory
 		if node.IsDir() {
@@ -243,13 +231,13 @@ func (r *Root) removeNode(n *Node) error {
 }
 
 func (r *Root) Find(absPath string) (*Node, error) {
-	paths := fileinfo.SplitPath(absPath, r.node.Dir())
+	paths := fileinfo.SplitPath(absPath, r.root.Dir())
 
 	if len(paths) == 0 {
 		return nil, errors.New("Find error: paths length is 0.")
 	}
 
-	n, ok := r.node.find(paths)
+	n, ok := r.root.find(paths)
 	if n == nil || !ok {
 		return nil, errors.New(fmt.Sprintf("Find error: %s node cannot found.", absPath))
 	}
@@ -262,7 +250,7 @@ func (r *Root) InoFind(ino uint64) *Node {
 		return nil
 	}
 
-	return r.nodes.get(ino)
+	return r.nodeMap.get(ino)
 }
 
 func (r *Root) appendWriteNodes(ne nodeEvent) error {
@@ -290,7 +278,7 @@ func (r *Root) addQueue(e fsnotify.Event) error {
 		r.mu.Lock()
 
 		if debug && e.Op > 0 {
-			log.Println("[Root/AddQueue] Events: " + e.Op.String() + " Name: " + e.Name)
+			log.Println("[Root/addQueue] Events: " + e.Op.String() + " Name: " + e.Name)
 		}
 
 		// add queue
@@ -335,7 +323,7 @@ func (r *Root) queuesToEvent() {
 	for _, ne := range *nodeEvents {
 		event := newEvent(ne)
 		if debug {
-			log.Println("[Root/checkEvents] event: " + event.String())
+			log.Println("[Root/queuesToEvent] event: " + event.String())
 		}
 
 		// append writeEvents
@@ -374,6 +362,15 @@ func (r *Root) checkWriteNodes() {
 	}
 }
 
+func (r *Root) checkDirectories() {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+
+	eqs, _ := r.root.checkDirectory()
+
+	*(r.queues) = append(*(r.queues), eqs...)
+}
+
 // watch start on goroutine.
 func (r *Root) Watch() {
 	// check already watching.
@@ -383,6 +380,7 @@ func (r *Root) Watch() {
 
 	go func() {
 		r.ticker = time.NewTicker(1 * time.Second)
+		r.chkTicker = time.NewTicker(60 * time.Second)
 
 		for {
 			select {
@@ -391,6 +389,8 @@ func (r *Root) Watch() {
 			case <-r.ticker.C:
 				r.checkWriteNodes()
 				r.queuesToEvent()
+			case <-r.chkTicker.C:
+				r.checkDirectories()
 			}
 		}
 	}()

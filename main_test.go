@@ -9,7 +9,7 @@ import (
 )
 
 var (
-	_dir    = ""
+	_dirs   = []string{""}
 	_subdir = ""
 	_root   = &Root{}
 )
@@ -58,7 +58,7 @@ func TestWatch(t *testing.T) {
 
 // shared test & initialize
 func createTestNodeTree(t *testing.T) {
-	r, err := CreateNodeTree(_dir)
+	r, err := CreateNodeTree(_dirs)
 	if err != nil {
 		t.Fatalf("[testCreateNodeTree] cannot create Root: %s", err)
 	}
@@ -68,7 +68,7 @@ func createTestNodeTree(t *testing.T) {
 }
 
 func makeTempDir() {
-	_dir = tempdir()
+	_dirs[0] = tempdir()
 
 	dirs := []string{
 		"/bin",
@@ -80,7 +80,7 @@ func makeTempDir() {
 	}
 
 	for _, dir := range dirs {
-		if err := os.MkdirAll(_dir+filepath.FromSlash(dir), 0777); err != nil {
+		if err := os.MkdirAll(_dirs[0]+filepath.FromSlash(dir), 0777); err != nil {
 			fmt.Printf("failed to create directory: %s", err)
 			os.Exit(1)
 		}
@@ -94,7 +94,7 @@ func makeTempDir() {
 	}
 
 	for _, file := range files {
-		if f, err := os.Create(_dir + filepath.FromSlash(file)); err != nil {
+		if f, err := os.Create(_dirs[0] + filepath.FromSlash(file)); err != nil {
 			fmt.Printf("failed to create file: %v", err)
 			os.Exit(1)
 		} else {
@@ -105,7 +105,7 @@ func makeTempDir() {
 
 // delete temp directory
 func removeTempDir() {
-	os.RemoveAll(_dir)
+	os.RemoveAll(_dirs[0])
 }
 
 func tempdir() string {
